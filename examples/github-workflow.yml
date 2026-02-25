@@ -1,0 +1,41 @@
+# Beispiel: GitHub Actions Workflow fuer automatische Release Notes
+# Trigger: Tag-Push (v*) → Release Notes generieren → GitHub Release erstellen
+
+name: Release Notes
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (mit vollstaendiger Historie)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # Variante 1: Als GitHub Action nutzen
+      - name: Release Notes generieren
+        uses: owner/release-note-server@v1
+        id: notes
+        # Ohne inputs → alles automatisch aus Git-Tags
+
+      # Variante 2: Direkt per CLI (alternativ zu Variante 1)
+      # - uses: actions/setup-node@v4
+      #   with:
+      #     node-version: '20'
+      # - run: npm ci
+      # - run: npm run cli -- --output RELEASE_NOTES.md
+
+      - name: GitHub Release erstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.notes.outputs.markdown }}
+          files: RELEASE_NOTES.md

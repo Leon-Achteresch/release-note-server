@@ -1,0 +1,72 @@
+name: 'Release Note Generator'
+description: 'Generiert Markdown Release Notes aus Conventional Commits via Git-Tags'
+
+inputs:
+  from:
+    description: 'Start git ref. Leer = automatisch vorheriger Tag'
+    required: false
+  to:
+    description: 'End git ref. Leer = automatisch aktueller Tag/HEAD'
+    required: false
+  version:
+    description: 'Version ueberschreiben. Leer = aus Tag-Name'
+    required: false
+  date:
+    description: 'Datum (YYYY-MM-DD). Leer = heute'
+    required: false
+  output:
+    description: 'Ausgabedatei'
+    default: 'RELEASE_NOTES.md'
+
+outputs:
+  markdown:
+    description: 'Generierte Release Notes als Markdown'
+    value: ${{ steps.generate.outputs.markdown }}
+  release-notes-path:
+    description: 'Pfad zur generierten Datei'
+    value: ${{ steps.generate.outputs.release-notes-path }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Node.js 20 einrichten
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Abhaengigkeiten installieren
+      shell: bash
+      run: npm ci
+      working-directory: ${{ github.action_path }}
+
+    - name: Release Notes generieren
+      id: generate
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        CLI_ARGS=""
+        if [ -n "${{ inputs.from }}" ]; then
+          CLI_ARGS="$CLI_ARGS --from ${{ inputs.from }}"
+        fi
+        if [ -n "${{ inputs.to }}" ]; then
+          CLI_ARGS="$CLI_ARGS --to ${{ inputs.to }}"
+        fi
+        if [ -n "${{ inputs.version }}" ]; then
+          CLI_ARGS="$CLI_ARGS --version ${{ inputs.version }}"
+        fi
+        if [ -n "${{ inputs.date }}" ]; then
+          CLI_ARGS="$CLI_ARGS --date ${{ inputs.date }}"
+        fi
+        CLI_ARGS="$CLI_ARGS --output ${{ inputs.output }}"
+
+        node --import tsx ${{ github.action_path }}/src/cli.ts $CLI_ARGS
+
+        # Set outputs
+        MARKDOWN=$(cat "${{ inputs.output }}")
+        echo "release-notes-path=${{ inputs.output }}" >> "$GITHUB_OUTPUT"
+
+        # Use delimiter for multiline output
+        EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+        echo "markdown<<$EOF" >> "$GITHUB_OUTPUT"
+        echo "$MARKDOWN" >> "$GITHUB_OUTPUT"
+        echo "$EOF" >> "$GITHUB_OUTPUT"

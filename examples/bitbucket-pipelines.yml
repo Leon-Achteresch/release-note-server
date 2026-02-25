@@ -1,0 +1,16 @@
+# Beispiel: Bitbucket Pipeline fuer automatische Release Notes
+# Trigger: Tag-Push (v*) → Release Notes generieren
+
+image: node:20-alpine
+
+pipelines:
+  tags:
+    'v*':
+      - step:
+          name: Release Notes generieren
+          script:
+            - npm ci
+            - npm run cli -- --output RELEASE_NOTES.md
+            - cat RELEASE_NOTES.md
+          artifacts:
+            - RELEASE_NOTES.md
