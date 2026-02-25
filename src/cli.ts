@@ -11,6 +11,7 @@ interface CliArgs {
   version?: string;
   date?: string;
   output?: string;
+  stdin: boolean;
   help: boolean;
 }
 
@@ -23,7 +24,7 @@ Nutzung:
   npm run cli                              Auto-detect aus Git-Tags
   npm run cli -- --output RELEASE.md       Ausgabe in Datei
   npm run cli -- --from v1.0.0 --to v1.1.0 Manuelle Commit-Range
-  echo "feat: test" | npm run cli          Stdin-Modus
+  echo "feat: test" | npm run cli -- --stdin  Stdin-Modus
 
 Optionen:
   --from <ref>          Start-Ref (Tag/Commit). Default: vorheriger Tag
@@ -31,11 +32,12 @@ Optionen:
   --version <v>         Version ueberschreiben. Default: aus Tag-Name
   --date <YYYY-MM-DD>   Datum ueberschreiben. Default: heute
   --output <datei>      In Datei schreiben. Default: stdout
+  --stdin               Commits von stdin lesen
   --help                Diese Hilfe anzeigen
 `.trim();
 
 export function parseArgs(argv: string[]): CliArgs {
-  const args: CliArgs = { help: false };
+  const args: CliArgs = { stdin: false, help: false };
 
   for (let i = 0; i < argv.length; i++) {
     switch (argv[i]) {
@@ -53,6 +55,9 @@ export function parseArgs(argv: string[]): CliArgs {
         break;
       case '--output':
         args.output = argv[++i];
+        break;
+      case '--stdin':
+        args.stdin = true;
         break;
       case '--help':
         args.help = true;
@@ -129,10 +134,6 @@ function readStdin(): Promise<string> {
   });
 }
 
-function isStdinPiped(): boolean {
-  return !process.stdin.isTTY;
-}
-
 export async function run(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
 
@@ -145,8 +146,8 @@ export async function run(argv: string[]): Promise<void> {
   let version = args.version;
   const date = args.date;
 
-  if (isStdinPiped() && !args.from) {
-    // Stdin mode
+  if (args.stdin) {
+    // Stdin mode (explicit flag)
     input = await readStdin();
   } else if (args.from) {
     // Manual refs mode

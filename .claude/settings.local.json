@@ -6,7 +6,9 @@
       "WebFetch(domain:gist.github.com)",
       "Bash(npm install:*)",
       "Bash(npm test:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npm run cli:*)",
+      "Bash(del \"C:\\\\VS PROJEKTE\\\\release-note-server\\\\test-output.md\" \"C:\\\\VS PROJEKTE\\\\release-note-server\\\\stderr.txt\")"
     ]
   }
 }

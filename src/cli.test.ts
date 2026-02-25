@@ -24,6 +24,11 @@ describe('parseArgs', () => {
     expect(args.help).toBe(true);
   });
 
+  it('parses --stdin', () => {
+    const args = parseArgs(['--stdin']);
+    expect(args.stdin).toBe(true);
+  });
+
   it('returns defaults for empty args', () => {
     const args = parseArgs([]);
     expect(args.from).toBeUndefined();
@@ -31,6 +36,7 @@ describe('parseArgs', () => {
     expect(args.version).toBeUndefined();
     expect(args.date).toBeUndefined();
     expect(args.output).toBeUndefined();
+    expect(args.stdin).toBe(false);
     expect(args.help).toBe(false);
   });
 
