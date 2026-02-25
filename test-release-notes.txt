@@ -1,0 +1,25 @@
+feat: add user authentication
+fix: resolve login redirect issue
+chore: update dependencies
+docs: update README with setup instructions
+style: format code with prettier
+refactor: simplify user service logic
+perf: optimize database query for dashboard
+test: add unit tests for auth service
+build: configure webpack for production
+ci: update GitHub Actions workflow
+feat(auth): add JWT login support
+fix(api): handle null response in user endpoint
+refactor(core): extract validation logic
+test(user): add integration tests for profile update
+perf(db): add index to users table
+ci(pipeline): cache node_modules
+build(frontend): split vendor bundle
+docs(api): add OpenAPI examples
+feat(api)!: change authentication flow to OAuth2
+refactor(config)!: remove legacy environment variables
+feat(auth): add JWT login support
+
+Implements access and refresh tokens.
+Adds middleware for token validation.
+Closes #123
