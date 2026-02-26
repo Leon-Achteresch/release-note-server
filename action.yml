@@ -1,7 +1,10 @@
 name: 'Release Note Generator'
-description: 'Generiert Markdown Release Notes aus Conventional Commits via Git-Tags'
+description: 'Generiert Markdown Release Notes aus Conventional Commits via Remote-Server'
 
 inputs:
+  server-url:
+    description: 'URL des Release-Note-Servers'
+    default: 'https://rl-server.leon-achteresch.de'
   from:
     description: 'Start git ref. Leer = automatisch vorheriger Tag'
     required: false
@@ -29,43 +32,122 @@ outputs:
 runs:
   using: 'composite'
   steps:
-    - name: Node.js 20 einrichten
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-
-    - name: Abhaengigkeiten installieren
-      shell: bash
-      run: npm ci
-      working-directory: ${{ github.action_path }}
-
-    - name: Release Notes generieren
-      id: generate
+    - name: Git-Tags erkennen und Commits sammeln
+      id: collect
       shell: bash
       working-directory: ${{ github.workspace }}
       run: |
-        CLI_ARGS=""
-        if [ -n "${{ inputs.from }}" ]; then
-          CLI_ARGS="$CLI_ARGS --from ${{ inputs.from }}"
-        fi
-        if [ -n "${{ inputs.to }}" ]; then
-          CLI_ARGS="$CLI_ARGS --to ${{ inputs.to }}"
-        fi
-        if [ -n "${{ inputs.version }}" ]; then
-          CLI_ARGS="$CLI_ARGS --version ${{ inputs.version }}"
-        fi
-        if [ -n "${{ inputs.date }}" ]; then
-          CLI_ARGS="$CLI_ARGS --date ${{ inputs.date }}"
-        fi
-        CLI_ARGS="$CLI_ARGS --output ${{ inputs.output }}"
+        # --- Tag-Erkennung ---
+        ALL_TAGS=$(git tag --sort=-v:refname 2>/dev/null || true)
 
-        node --import tsx ${{ github.action_path }}/src/cli.ts $CLI_ARGS
+        CURRENT_TAG=""
+        PREVIOUS_TAG=""
+        VERSION=""
 
-        # Set outputs
-        MARKDOWN=$(cat "${{ inputs.output }}")
+        if [ -n "$ALL_TAGS" ]; then
+          # Pruefen ob HEAD auf einem Tag liegt
+          CURRENT_TAG=$(git describe --tags --exact-match HEAD 2>/dev/null || echo "")
+
+          if [ -z "$CURRENT_TAG" ]; then
+            # HEAD liegt nicht auf einem Tag - neuesten Tag verwenden
+            CURRENT_TAG=$(echo "$ALL_TAGS" | head -n 1)
+          fi
+
+          # Vorherigen Tag finden
+          FOUND_CURRENT=false
+          while IFS= read -r tag; do
+            if [ "$FOUND_CURRENT" = true ]; then
+              PREVIOUS_TAG="$tag"
+              break
+            fi
+            if [ "$tag" = "$CURRENT_TAG" ]; then
+              FOUND_CURRENT=true
+            fi
+          done <<< "$ALL_TAGS"
+
+          # Version aus Tag-Name ableiten (v-Prefix entfernen)
+          VERSION="${CURRENT_TAG#v}"
+        fi
+
+        # --- Overrides aus Inputs ---
+        FROM="${{ inputs.from }}"
+        TO="${{ inputs.to }}"
+        INPUT_VERSION="${{ inputs.version }}"
+
+        if [ -n "$INPUT_VERSION" ]; then
+          VERSION="$INPUT_VERSION"
+        fi
+
+        if [ -z "$TO" ]; then
+          TO="${CURRENT_TAG:-HEAD}"
+        fi
+
+        # --- Commits sammeln ---
+        if [ -n "$FROM" ]; then
+          COMMITS=$(git log "${FROM}..${TO}" --format=%B)
+        elif [ -n "$PREVIOUS_TAG" ]; then
+          COMMITS=$(git log "${PREVIOUS_TAG}..${TO}" --format=%B)
+        elif [ -n "$CURRENT_TAG" ]; then
+          FIRST_COMMIT=$(git rev-list --max-parents=0 HEAD 2>/dev/null || true)
+          if [ -n "$FIRST_COMMIT" ]; then
+            COMMITS=$(git log "${FIRST_COMMIT}..${TO}" --format=%B)
+          else
+            COMMITS=$(git log "${TO}" --format=%B)
+          fi
+        else
+          COMMITS=$(git log HEAD --format=%B)
+        fi
+
+        # Outputs setzen
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+        EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+        echo "commits<<$EOF" >> "$GITHUB_OUTPUT"
+        echo "$COMMITS" >> "$GITHUB_OUTPUT"
+        echo "$EOF" >> "$GITHUB_OUTPUT"
+
+    - name: Release Notes vom Server generieren
+      id: generate
+      shell: bash
+      run: |
+        SERVER_URL="${{ inputs.server-url }}"
+        VERSION="${{ steps.collect.outputs.version }}"
+        DATE="${{ inputs.date }}"
+        COMMITS="${{ steps.collect.outputs.commits }}"
+
+        # JSON-Body bauen
+        JSON_BODY=$(jq -n \
+          --arg commits "$COMMITS" \
+          --arg version "$VERSION" \
+          --arg date "$DATE" \
+          '{commits: $commits} + (if $version != "" then {version: $version} else {} end) + (if $date != "" then {date: $date} else {} end)')
+
+        # API aufrufen
+        RESPONSE=$(curl -sf \
+          -X POST \
+          -H "Content-Type: application/json" \
+          -d "$JSON_BODY" \
+          "${SERVER_URL}/api/release-notes")
+
+        if [ $? -ne 0 ]; then
+          echo "::error::Server-Anfrage an ${SERVER_URL} fehlgeschlagen"
+          exit 1
+        fi
+
+        # Markdown aus Response extrahieren
+        MARKDOWN=$(echo "$RESPONSE" | jq -r '.markdown')
+
+        # Meta-Informationen loggen
+        TOTAL=$(echo "$RESPONSE" | jq -r '.meta.total')
+        REMOVED=$(echo "$RESPONSE" | jq -r '.meta.duplicatesRemoved')
+        UNPARSEABLE=$(echo "$RESPONSE" | jq -r '.meta.unparseable')
+        echo "::notice::Release Notes: ${TOTAL} Commits, ${REMOVED} Duplikate entfernt, ${UNPARSEABLE} nicht parsebar"
+
+        # In Datei schreiben
+        echo "$MARKDOWN" > "${{ inputs.output }}"
         echo "release-notes-path=${{ inputs.output }}" >> "$GITHUB_OUTPUT"
 
-        # Use delimiter for multiline output
+        # Multiline-Output
         EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
         echo "markdown<<$EOF" >> "$GITHUB_OUTPUT"
         echo "$MARKDOWN" >> "$GITHUB_OUTPUT"
