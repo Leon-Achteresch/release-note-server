@@ -1,0 +1,63 @@
+# =============================================================================
+# GitHub Actions – Release Notes via curl (ohne Action-Dependency)
+# =============================================================================
+#
+# Nutzt den Server direkt per REST-API.
+# Keine externe Action noetig – nur curl und jq (auf ubuntu-latest vorhanden).
+# =============================================================================
+
+name: Release Notes
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (vollstaendige Historie)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Commits sammeln und Release Notes generieren
+        id: notes
+        run: |
+          # Tag-Erkennung
+          CURRENT_TAG="${GITHUB_REF_NAME}"
+          PREVIOUS_TAG=$(git tag --sort=-v:refname | grep -v "^${CURRENT_TAG}$" | head -n 1)
+          VERSION="${CURRENT_TAG#v}"
+
+          # Commits zwischen den Tags sammeln
+          if [ -n "$PREVIOUS_TAG" ]; then
+            COMMITS=$(git log "${PREVIOUS_TAG}..${CURRENT_TAG}" --format=%B)
+          else
+            COMMITS=$(git log "${CURRENT_TAG}" --format=%B)
+          fi
+
+          # Server aufrufen
+          RESPONSE=$(curl -sf \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "$(jq -n --arg c "$COMMITS" --arg v "$VERSION" '{commits: $c, version: $v}')" \
+            "https://rl-server.leon-achteresch.de/api/release-notes")
+
+          MARKDOWN=$(echo "$RESPONSE" | jq -r '.markdown')
+
+          # Output setzen
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "markdown<<$EOF" >> "$GITHUB_OUTPUT"
+          echo "$MARKDOWN" >> "$GITHUB_OUTPUT"
+          echo "$EOF" >> "$GITHUB_OUTPUT"
+
+      - name: GitHub Release erstellen
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.notes.outputs.markdown }}
+          tag_name: ${{ github.ref_name }}

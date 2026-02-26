@@ -1,5 +1,13 @@
-# Beispiel: GitHub Actions Workflow fuer automatische Release Notes
-# Trigger: Tag-Push (v*) → Release Notes generieren → GitHub Release erstellen
+# =============================================================================
+# GitHub Actions – Automatische Release Notes bei Tag-Push
+# =============================================================================
+#
+# Voraussetzung: Conventional Commits (feat:, fix:, docs:, ...)
+#
+# 1. Kopiere diese Datei nach .github/workflows/release-notes.yml
+# 2. Pushe einen Tag: git tag v1.2.0 && git push --tags
+# 3. GitHub Release wird automatisch erstellt
+# =============================================================================
 
 name: Release Notes
 
@@ -15,27 +23,30 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout (mit vollstaendiger Historie)
+      - name: Checkout (vollstaendige Historie)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
 
-      # Variante 1: Als GitHub Action nutzen
+      # -----------------------------------------------------------------------
+      # Variante A: Reusable Action (empfohlen)
+      # -----------------------------------------------------------------------
       - name: Release Notes generieren
-        uses: owner/release-note-server@v1
         id: notes
-        # Ohne inputs → alles automatisch aus Git-Tags
-
-      # Variante 2: Direkt per CLI (alternativ zu Variante 1)
-      # - uses: actions/setup-node@v4
-      #   with:
-      #     node-version: '20'
-      # - run: npm ci
-      # - run: npm run cli -- --output RELEASE_NOTES.md
+        uses: LeonAchtworworter/release-note-server@main
+        # Ohne Inputs wird alles automatisch aus Git-Tags erkannt.
+        # Optionale Inputs:
+        # with:
+        #   server-url: 'https://rl-server.leon-achteresch.de'  # Default
+        #   from: 'v1.0.0'      # Start-Ref manuell setzen
+        #   to: 'v1.1.0'        # End-Ref manuell setzen
+        #   version: '1.1.0'    # Version ueberschreiben
+        #   date: '2026-01-15'  # Datum ueberschreiben
+        #   output: 'RELEASE_NOTES.md'  # Default
 
       - name: GitHub Release erstellen
         uses: softprops/action-gh-release@v2
         with:
           body: ${{ steps.notes.outputs.markdown }}
-          files: RELEASE_NOTES.md
+          tag_name: ${{ github.ref_name }}

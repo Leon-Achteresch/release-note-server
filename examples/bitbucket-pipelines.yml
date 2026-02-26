@@ -1,7 +1,16 @@
-# Beispiel: Bitbucket Pipeline fuer automatische Release Notes
-# Trigger: Tag-Push (v*) → Release Notes generieren
+# =============================================================================
+# Bitbucket Pipelines – Automatische Release Notes bei Tag-Push
+# =============================================================================
+#
+# 1. Kopiere diese Datei nach bitbucket-pipelines.yml
+# 2. Pushe einen Tag: git tag v1.2.0 && git push --tags
+# 3. Release Notes werden als Artefakt gespeichert
+# =============================================================================
 
-image: node:20-alpine
+image: alpine:latest
+
+clone:
+  depth: full
 
 pipelines:
   tags:
@@ -9,8 +18,27 @@ pipelines:
       - step:
           name: Release Notes generieren
           script:
-            - npm ci
-            - npm run cli -- --output RELEASE_NOTES.md
+            - apk add --no-cache curl jq git
+
+            # Commits sammeln
+            - CURRENT_TAG=$(git describe --tags --exact-match HEAD)
+            - PREVIOUS_TAG=$(git tag --sort=-v:refname | grep -v "^${CURRENT_TAG}$" | head -n 1)
+            - VERSION="${CURRENT_TAG#v}"
+            - |
+              if [ -n "$PREVIOUS_TAG" ]; then
+                COMMITS=$(git log "${PREVIOUS_TAG}..${CURRENT_TAG}" --format=%B)
+              else
+                COMMITS=$(git log "${CURRENT_TAG}" --format=%B)
+              fi
+
+            # Release Notes generieren
+            - |
+              RESPONSE=$(curl -sf \
+                -X POST \
+                -H "Content-Type: application/json" \
+                -d "$(jq -n --arg c "$COMMITS" --arg v "$VERSION" '{commits: $c, version: $v}')" \
+                "https://rl-server.leon-achteresch.de/api/release-notes")
+            - echo "$RESPONSE" | jq -r '.markdown' > RELEASE_NOTES.md
             - cat RELEASE_NOTES.md
           artifacts:
             - RELEASE_NOTES.md
