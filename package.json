@@ -14,7 +14,9 @@
   "license": "ISC",
   "dependencies": {
     "@fastify/cors": "^11.2.0",
-    "fastify": "^5.7.4"
+    "dotenv": "^17.3.1",
+    "fastify": "^5.7.4",
+    "openai": "^6.25.0"
   },
   "devDependencies": {
     "@types/node": "^25.3.0",

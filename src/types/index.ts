@@ -45,3 +45,28 @@ export interface ReleaseNotesResponse {
   markdown: string;
   meta: ReleaseNotesMeta;
 }
+
+// ---------------------------------------------------------------------------
+// AI types
+// ---------------------------------------------------------------------------
+
+export interface AiReleaseNotesRequest {
+  commits: string;
+  version?: string;
+  date?: string;
+  /** Override the OpenRouter model for this request */
+  model?: string;
+  /** Language for the generated release notes (default: "de") */
+  language?: string;
+  /** Additional instructions appended to the system prompt */
+  extraInstructions?: string;
+}
+
+export interface AiReleaseNotesResponse {
+  markdown: string;
+  meta: ReleaseNotesMeta & {
+    model: string;
+    promptTokens?: number;
+    completionTokens?: number;
+  };
+}
